@@ -7,40 +7,6 @@ import os
 
 ics_file = 'ics_etu.ics'
 
-
-def parse_cmd(message):
-
-    d = {'today': datetime.datetime.now(), 'tomorrow': datetime.datetime.now() + datetime.timedelta(days=1)}
-
-    pattern = "!c(?:elcat)? *(?:(today|tomorrow)|(\d{1,2}\/\d{1,2}(?:\/\d{4})?))"
-
-    m = re.search(pattern, message)
-
-    if m:
-        if m.group(1):
-            if m.group(1) in d:
-                y = d[m.group(1)]
-            else:
-                return 0
-        elif m.group(2):
-            if len(m.group(2)) < 8:
-                try:
-                    y = datetime.datetime.strptime(m.group(2), "%d/%m")
-                except Exception:
-                    return None
-                else:
-                    y = y.replace(year=datetime.datetime.now().year)
-
-            else:
-                try:
-                    y = datetime.datetime.strptime(m.group(2), "%d/%m/%Y")
-                except Exception:
-                    return None
-        if y:
-            return y
-        else:
-            return None
-
 def parse_course(component):
 
 
@@ -70,7 +36,6 @@ def parse_course(component):
 
         '''Traitement du summary'''
 
-        print(summary)
         for field_name, field_parsing in summary_patterns.items():
             field_data = re.search(field_parsing, summary)
             if field_data:
@@ -111,16 +76,12 @@ def get_courses(calendar, date, groups):
 
     courses = []
 
-    groupscpy = groups.copy()
-
-    groupscpy.append("all")
-
     for component in calendar.walk():
         if component.name == "VEVENT":
             if component.get("dtstart").dt.date() == date.date():
                 course = parse_course(component)
                 if course:
-                    if set(course["groupe"]) & set(groupscpy):
+                    if set(course["groupe"]) & set(groups + ['all']):
                             courses.append(course)
     return courses
 
@@ -132,8 +93,6 @@ def get_icalendar():
         created_time = datetime.datetime.fromtimestamp(0)
 
     if created_time + datetime.timedelta(hours=1) < datetime.datetime.now():
-            print(created_time)
-            print("Téléchargement du fichier...")
             r = requests.get("http://celcat.univ-angers.fr/ics_etu.php?url=publi/etu/g467129.ics")
             open('ics_etu.ics', 'wb').write(r.content)
 
@@ -145,7 +104,6 @@ def format_courses(courses):
     formatted_courses = []
 
     if courses:
-        answer = ""
         for course in courses:
             f = "{:%Hh%M}->{:%Hh%M} : [{}] {} en {} avec {} ({})".format(course["debut"], course["fin"],
                                                                              course["type"], " ".join(course["matiere"]),
@@ -161,29 +119,19 @@ def format_courses(courses):
         return None
 
 
-def process(message, groups):
+def process(date, groups):
 
     calendar = get_icalendar()
 
-    date = parse_cmd(message)
+    dt = datetime.datetime.strptime(date, '%d-%m-%Y')
 
-    if date:
+    courses = get_courses(calendar, dt, groups)
 
-        courses = get_courses(calendar, date, groups)
-
-        if courses:
-            formatted_courses = format_courses(courses)
-        else:
-            formatted_courses = ["Pas de cours trouvé à cette date"]
-
+    if courses:
+        formatted_courses = format_courses(courses)
     else:
-        formatted_courses = ["Format de date non valide ; !help pour plus de détails"]
+        formatted_courses = ["Pas de cours trouvé à cette date"]
+
 
     return '\n'.join(formatted_courses)
-
-
-
-
-
-
 
